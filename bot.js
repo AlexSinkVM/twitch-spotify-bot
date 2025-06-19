@@ -28,7 +28,7 @@ function loadTokens() {
   return null;
 }
 
-// Intentar cargar tokens guardados
+// Cargar tokens si existen
 const savedTokens = loadTokens();
 if (savedTokens) {
   spotifyApi.setAccessToken(savedTokens.access_token);
@@ -36,7 +36,7 @@ if (savedTokens) {
   console.log('🔄 Tokens cargados desde disco');
 }
 
-// Refrescar token si expiró
+// Refrescar token si es necesario
 async function refreshTokenIfNeeded() {
   try {
     const data = await spotifyApi.refreshAccessToken();
@@ -51,7 +51,7 @@ async function refreshTokenIfNeeded() {
   }
 }
 
-// Ruta para iniciar login en Spotify
+// Ruta para autorizar con Spotify
 app.get('/login', (req, res) => {
   const authorizeURL = spotifyApi.createAuthorizeURL(scopes);
   res.redirect(authorizeURL);
@@ -75,13 +75,13 @@ app.get('/callback', async (req, res) => {
   }
 });
 
-// Puerto dinámico para Render
+// Puerto para Render
 const PORT = process.env.PORT || 8888;
 app.listen(PORT, () => {
   console.log(`Servidor listo en http://localhost:${PORT}/login`);
 });
 
-// Twitch client
+// Twitch Bot
 const twitchClient = new tmi.Client({
   options: { debug: true },
   identity: {
@@ -97,7 +97,7 @@ twitchClient.on('message', async (channel, tags, message, self) => {
   if (tags['custom-reward-id']) {
     console.log('💡 Recompensa usada');
     console.log('👉 ID:', tags['custom-reward-id']);
-    console.log('🎵 Canción:', message);
+    console.log('🎵 Canción solicitada:', message);
 
     if (tags['custom-reward-id'] === '154d4847-aec0-4b73-8f21-0e3313bc6c4f') {
       try {
@@ -106,13 +106,13 @@ twitchClient.on('message', async (channel, tags, message, self) => {
         const result = await spotifyApi.searchTracks(message);
         const track = result.body.tracks.items[0];
         if (track) {
-          await spotifyApi.play({ uris: [track.uri] });
-          console.log(`🎶 Reproduciendo: ${track.name} - ${track.artists[0].name}`);
+          await spotifyApi.addToQueue(track.uri);
+          console.log(`➕ Añadido a la cola: ${track.name} - ${track.artists[0].name}`);
         } else {
-          console.log(`❌ No se encontró: ${message}`);
+          console.log(`❌ No se encontró la canción: ${message}`);
         }
       } catch (error) {
-        console.error('⚠️ Error al reproducir la canción:', error);
+        console.error('⚠️ Error al agregar a la cola:', error);
       }
     }
   }
