@@ -54,8 +54,9 @@ async function refreshTokenIfNeeded() {
 // === Rutas de Express para Spotify Auth ===
 app.get('/login', (req, res) => {
   const authorizeURL = spotifyApi.createAuthorizeURL(scopes);
-  res.redirect(authorizeURL);
+  res.send(`<a href="${authorizeURL}">Haz clic aquí para conectar tu cuenta de Spotify</a>`);
 });
+
 
 app.get('/callback', async (req, res) => {
   const { code } = req.query;
@@ -78,7 +79,7 @@ app.get('/callback', async (req, res) => {
 const PORT = process.env.PORT || 8888;
 
 setInterval(() => {
-  http.get(`http://localhost:${PORT}/login`).on('error', (err) => {
+  http.get('https://twitch-spotify-bot.onrender.com/login').on('error', (err) => {
     console.error('Ping interno falló:', err.message);
   });
   console.log('⏰ Ping interno enviado para mantener activo');
