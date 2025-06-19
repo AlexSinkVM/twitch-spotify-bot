@@ -3,7 +3,7 @@ const SpotifyWebApi = require('spotify-web-api-node');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const http = require('http');
+const https = require('https');
 
 // === CONFIGURACIÓN ===
 const clientId = '90e213d3dedf4d7aa7aa0c3ad00eb1ff';
@@ -85,9 +85,10 @@ app.get('/callback', async (req, res) => {
 });
 
 // === PING INTERNO PARA RENDER ===
-const PORT = process.env.PORT || 8888;
+const https = require('https');
+
 setInterval(() => {
-  http.get('https://twitch-spotify-bot.onrender.com/login').on('error', (err) => {
+  https.get('https://twitch-spotify-bot-heak.onrender.com/login').on('error', (err) => {
     console.error('Ping interno falló:', err.message);
   });
   console.log('⏰ Ping interno enviado para mantener activo');
