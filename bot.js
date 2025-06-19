@@ -98,36 +98,34 @@ const twitchClient = new tmi.Client({
   channels: ['alexsink'],
 });
 
-twitchClient.connect();
+twitchClient.connect()
+  .then(() => console.log('✅ Twitch client conectado'))
+  .catch(console.error);
 
 twitchClient.on('message', async (channel, tags, message, self) => {
-  if (self) return; // Ignorar mensajes enviados por el bot para evitar duplicados
+  console.log(`Mensaje recibido: "${message}", self: ${self}, canal: ${channel}`);
 
-  if (tags['custom-reward-id']) {
-    console.log('💡 Recompensa usada');
-    console.log('👉 ID:', tags['custom-reward-id']);
-    console.log('🎵 Canción solicitada:', message);
+  if (self) return; // Ignorar mensajes del bot
+  if (channel !== '#alexsink') return; // Solo canal objetivo
 
-    if (tags['custom-reward-id'] === '154d4847-aec0-4b73-8f21-0e3313bc6c4f') {
-      try {
-        await refreshTokenIfNeeded();
+  if (tags['custom-reward-id'] === '154d4847-aec0-4b73-8f21-0e3313bc6c4f') {
+    try {
+      await refreshTokenIfNeeded();
 
-        const result = await spotifyApi.searchTracks(message);
-        const track = result.body.tracks.items[0];
-        if (track) {
-          await spotifyApi.addToQueue(track.uri);
-          console.log(`➕ Añadido a la cola: ${track.name} - ${track.artists[0].name}`);
+      const result = await spotifyApi.searchTracks(message);
+      const track = result.body.tracks.items[0];
+      if (track) {
+        await spotifyApi.addToQueue(track.uri);
+        console.log(`➕ Añadido a la cola: ${track.name} - ${track.artists[0].name}`);
 
-          // Enviar mensaje al chat confirmando
-          twitchClient.say(channel, `🎶 Añadido a la cola: "${track.name}" - ${track.artists[0].name}`);
-        } else {
-          console.log(`❌ No se encontró la canción: ${message}`);
-          twitchClient.say(channel, `❌ No encontré la canción: "${message}"`);
-        }
-      } catch (error) {
-        console.error('⚠️ Error al agregar a la cola:', error);
-        twitchClient.say(channel, '⚠️ Ocurrió un error al intentar añadir la canción.');
+        twitchClient.say(channel, `🎶 Añadido a la cola: "${track.name}" - ${track.artists[0].name}`);
+      } else {
+        console.log(`❌ No se encontró la canción: ${message}`);
+        twitchClient.say(channel, `❌ No encontré la canción: "${message}"`);
       }
+    } catch (error) {
+      console.error('⚠️ Error al agregar a la cola:', error);
+      twitchClient.say(channel, '⚠️ Ocurrió un error al intentar añadir la canción.');
     }
   }
 });
