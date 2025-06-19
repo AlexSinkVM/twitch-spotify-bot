@@ -3,24 +3,25 @@ const SpotifyWebApi = require('spotify-web-api-node');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const https = require('https');
+const https = require('https'); // SOLO UNA VEZ aquí
 
-// === CONFIGURACIÓN ===
 const clientId = '90e213d3dedf4d7aa7aa0c3ad00eb1ff';
 const clientSecret = '45f592b007024040a44c80b032e6a4eb';
-const redirectUri = 'https://twitch-spotify-bot-heak.onrender.com/callback';
+const redirectUri = 'https://twitch-spotify-bot.onrender.com/callback';
 
 const spotifyApi = new SpotifyWebApi({ clientId, clientSecret, redirectUri });
 const app = express();
+
 const scopes = ['user-modify-playback-state', 'user-read-playback-state'];
 const TOKEN_PATH = path.join(__dirname, 'spotify_token.json');
 
-// === FUNCIONES DE TOKENS ===
+// Guardar tokens en disco
 function saveTokens(data) {
   fs.writeFileSync(TOKEN_PATH, JSON.stringify(data));
   console.log('✅ Tokens guardados');
 }
 
+// Cargar tokens desde disco
 function loadTokens() {
   if (fs.existsSync(TOKEN_PATH)) {
     const data = fs.readFileSync(TOKEN_PATH);
@@ -29,7 +30,7 @@ function loadTokens() {
   return null;
 }
 
-// === CARGAR TOKENS EXISTENTES ===
+// Carga tokens al iniciar
 const savedTokens = loadTokens();
 if (savedTokens) {
   spotifyApi.setAccessToken(savedTokens.access_token);
@@ -37,7 +38,7 @@ if (savedTokens) {
   console.log('🔄 Tokens cargados desde disco');
 }
 
-// === REFRESCAR TOKEN SI ES NECESARIO ===
+// Refrescar token si expiró
 async function refreshTokenIfNeeded() {
   try {
     const data = await spotifyApi.refreshAccessToken();
@@ -52,21 +53,12 @@ async function refreshTokenIfNeeded() {
   }
 }
 
-// === RUTA /LOGIN VISUAL ===
+// Rutas Express para login y callback
 app.get('/login', (req, res) => {
   const authorizeURL = spotifyApi.createAuthorizeURL(scopes);
-  res.send(`
-    <html>
-      <head><title>Conectar Spotify</title></head>
-      <body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
-        <h2>Conecta tu cuenta de Spotify</h2>
-        <a href="${authorizeURL}" style="padding: 10px 20px; background: #1DB954; color: white; border-radius: 5px; text-decoration: none;">Conectar con Spotify</a>
-      </body>
-    </html>
-  `);
+  res.redirect(authorizeURL);
 });
 
-// === CALLBACK DE SPOTIFY ===
 app.get('/callback', async (req, res) => {
   const { code } = req.query;
   try {
@@ -84,11 +76,11 @@ app.get('/callback', async (req, res) => {
   }
 });
 
-// === PING INTERNO PARA RENDER ===
-const https = require('https');
+// Mantener app despierta con ping a la URL pública
+const PORT = process.env.PORT || 8888;
 
 setInterval(() => {
-  https.get('https://twitch-spotify-bot-heak.onrender.com/login').on('error', (err) => {
+  https.get('https://twitch-spotify-bot.onrender.com/login').on('error', (err) => {
     console.error('Ping interno falló:', err.message);
   });
   console.log('⏰ Ping interno enviado para mantener activo');
@@ -98,7 +90,7 @@ app.listen(PORT, () => {
   console.log(`🚀 Servidor listo en http://localhost:${PORT}/login`);
 });
 
-// === TWITCH BOT ===
+// Configuración Twitch bot
 const twitchClient = new tmi.Client({
   options: { debug: true },
   identity: {
