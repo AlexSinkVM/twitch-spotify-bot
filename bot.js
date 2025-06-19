@@ -108,11 +108,16 @@ twitchClient.on('message', async (channel, tags, message, self) => {
         if (track) {
           await spotifyApi.addToQueue(track.uri);
           console.log(`➕ Añadido a la cola: ${track.name} - ${track.artists[0].name}`);
+
+          // 🔊 Enviar mensaje al chat de Twitch
+          twitchClient.say(channel, `🎶 ¡Canción añadida a la cola!: "${track.name}" - ${track.artists[0].name}`);
         } else {
           console.log(`❌ No se encontró la canción: ${message}`);
+          twitchClient.say(channel, `❌ No encontré la canción: "${message}"`);
         }
       } catch (error) {
         console.error('⚠️ Error al agregar a la cola:', error);
+        twitchClient.say(channel, '⚠️ Hubo un error al intentar añadir la canción a la cola.');
       }
     }
   }
