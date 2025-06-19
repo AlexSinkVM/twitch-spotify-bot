@@ -3,27 +3,23 @@ const SpotifyWebApi = require('spotify-web-api-node');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const open = (...args) => import('open').then(({ default: open }) => open(...args));
 
 const clientId = '90e213d3dedf4d7aa7aa0c3ad00eb1ff';
 const clientSecret = '45f592b007024040a44c80b032e6a4eb';
 const redirectUri = 'https://twitch-spotify-bot.onrender.com/callback';
 
-
 const spotifyApi = new SpotifyWebApi({ clientId, clientSecret, redirectUri });
 const app = express();
-
 const scopes = ['user-modify-playback-state', 'user-read-playback-state'];
-
 const TOKEN_PATH = path.join(__dirname, 'spotify_token.json');
 
-// Función para guardar tokens en disco
+// Guardar tokens en disco
 function saveTokens(data) {
   fs.writeFileSync(TOKEN_PATH, JSON.stringify(data));
   console.log('✅ Tokens guardados');
 }
 
-// Función para cargar tokens desde disco
+// Cargar tokens desde disco
 function loadTokens() {
   if (fs.existsSync(TOKEN_PATH)) {
     const data = fs.readFileSync(TOKEN_PATH);
@@ -32,7 +28,7 @@ function loadTokens() {
   return null;
 }
 
-// Carga tokens si existen
+// Intentar cargar tokens guardados
 const savedTokens = loadTokens();
 if (savedTokens) {
   spotifyApi.setAccessToken(savedTokens.access_token);
@@ -40,7 +36,7 @@ if (savedTokens) {
   console.log('🔄 Tokens cargados desde disco');
 }
 
-// Función para refrescar token si está expirado
+// Refrescar token si expiró
 async function refreshTokenIfNeeded() {
   try {
     const data = await spotifyApi.refreshAccessToken();
@@ -58,11 +54,10 @@ async function refreshTokenIfNeeded() {
 // Ruta para iniciar login en Spotify
 app.get('/login', (req, res) => {
   const authorizeURL = spotifyApi.createAuthorizeURL(scopes);
-  res.redirect(authorizeURL); // esto sí funciona en Render
+  res.redirect(authorizeURL);
 });
 
-
-// Callback donde Spotify devuelve el código de autorización
+// Ruta de callback de Spotify
 app.get('/callback', async (req, res) => {
   const { code } = req.query;
   try {
@@ -80,12 +75,11 @@ app.get('/callback', async (req, res) => {
   }
 });
 
+// Puerto dinámico para Render
 const PORT = process.env.PORT || 8888;
-
 app.listen(PORT, () => {
   console.log(`Servidor listo en http://localhost:${PORT}/login`);
 });
-
 
 // Twitch client
 const twitchClient = new tmi.Client({
@@ -107,7 +101,6 @@ twitchClient.on('message', async (channel, tags, message, self) => {
 
     if (tags['custom-reward-id'] === '154d4847-aec0-4b73-8f21-0e3313bc6c4f') {
       try {
-        // Refresca token antes de usar (por si expiró)
         await refreshTokenIfNeeded();
 
         const result = await spotifyApi.searchTracks(message);
