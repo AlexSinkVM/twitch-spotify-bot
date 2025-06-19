@@ -7,7 +7,8 @@ const open = (...args) => import('open').then(({ default: open }) => open(...arg
 
 const clientId = '90e213d3dedf4d7aa7aa0c3ad00eb1ff';
 const clientSecret = '45f592b007024040a44c80b032e6a4eb';
-const redirectUri = 'http://localhost:8888/callback';
+const redirectUri = 'https://twitch-spotify-bot.onrender.com/callback';
+
 
 const spotifyApi = new SpotifyWebApi({ clientId, clientSecret, redirectUri });
 const app = express();
