@@ -56,11 +56,11 @@ async function refreshTokenIfNeeded() {
 }
 
 // Ruta para iniciar login en Spotify
-app.get('/login', async (req, res) => {
+app.get('/login', (req, res) => {
   const authorizeURL = spotifyApi.createAuthorizeURL(scopes);
-  await open(authorizeURL);
-  res.send('Abriendo Spotify para autenticación...');
+  res.redirect(authorizeURL); // esto sí funciona en Render
 });
+
 
 // Callback donde Spotify devuelve el código de autorización
 app.get('/callback', async (req, res) => {
