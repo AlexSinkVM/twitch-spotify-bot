@@ -79,9 +79,12 @@ app.get('/callback', async (req, res) => {
   }
 });
 
-app.listen(8888, () => {
-  console.log('Servidor listo en http://localhost:8888/login');
+const PORT = process.env.PORT || 8888;
+
+app.listen(PORT, () => {
+  console.log(`Servidor listo en http://localhost:${PORT}/login`);
 });
+
 
 // Twitch client
 const twitchClient = new tmi.Client({
