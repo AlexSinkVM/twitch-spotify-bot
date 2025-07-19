@@ -5,25 +5,6 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 
-const LOCKFILE = path.join(__dirname, 'bot.lock');
-
-// Verificar si ya hay una instancia corriendo
-if (fs.existsSync(LOCKFILE)) {
-  console.log('⚠️ El bot ya está corriendo, saliendo...');
-  process.exit(1);
-} else {
-  fs.writeFileSync(LOCKFILE, process.pid.toString());
-}
-
-// Limpiar lockfile al salir
-function cleanLockFile() {
-  if (fs.existsSync(LOCKFILE)) fs.unlinkSync(LOCKFILE);
-}
-
-process.on('exit', cleanLockFile);
-process.on('SIGINT', () => process.exit());
-process.on('SIGTERM', () => process.exit());
-
 // === Configuración Spotify ===
 const clientId = '90e213d3dedf4d7aa7aa0c3ad00eb1ff';
 const clientSecret = '45f592b007024040a44c80b032e6a4eb';
@@ -155,6 +136,7 @@ async function processQueue() {
         const retryAfter = parseInt(error.headers['retry-after'], 10) || 5;
         await new Promise(r => setTimeout(r, retryAfter * 1000));
       } else {
+        // En otros errores manda mensaje de fallo genérico
         twitchClient.say(channel, '⚠️ Ocurrió un error al intentar añadir la canción.');
       }
     }
