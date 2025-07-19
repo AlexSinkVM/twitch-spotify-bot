@@ -114,20 +114,15 @@ const mensajesDelBot = [
 ];
 
 twitchClient.on('message', async (channel, tags, message, self) => {
-  console.log(`[${channel}] <${tags['display-name']}>: ${message}`);
+  if (self) return; // Ignorar mensajes propios
+  if (channel !== '#alexsink') return; // Solo canal especificado
+  if (mensajesDelBot.some(m => message.startsWith(m))) return; // Ignorar mensajes del bot
 
-  if (self || channel !== '#alexsink') return;
-
-  // Ignorar respuestas previas del bot
-  if (mensajesDelBot.some(m => message.startsWith(m))) return;
-
-  // Si está rate limited
   if (isRateLimited) {
     twitchClient.say(channel, '⚠️ Por favor espera un poco antes de pedir otra canción.');
     return;
   }
 
-  // Solo si viene de la recompensa personalizada
   if (tags['custom-reward-id'] === customRewardId) {
     try {
       await refreshTokenIfNeeded();
@@ -137,26 +132,22 @@ twitchClient.on('message', async (channel, tags, message, self) => {
       if (track) {
         await spotifyApi.addToQueue(track.uri);
         const response = `🎶 Añadido a la cola: "${track.name}" - ${track.artists[0].name}`;
-        console.log(response);
         twitchClient.say(channel, response);
       } else {
-        const notFound = `❌ No encontré la canción: "${message}"`;
-        console.log(notFound);
-        twitchClient.say(channel, notFound);
+        twitchClient.say(channel, `❌ No encontré la canción: "${message}"`);
       }
-
     } catch (error) {
-      console.error('⚠️ Error al añadir canción:', error);
-
+      console.error('⚠️ Error al añadir canción:', error.message || error);
       if (error.statusCode === 429) {
-        isRateLimited = true;
-        const retryAfter = parseInt(error.headers['retry-after'], 10) || 5;
-        twitchClient.say(channel, `⚠️ Límite de peticiones alcanzado, espera ${retryAfter} segundos.`);
-
-        setTimeout(() => {
-          isRateLimited = false;
-          twitchClient.say(channel, '✅ Rate limit levantado, se pueden hacer peticiones de nuevo.');
-        }, retryAfter * 1000);
+        if (!isRateLimited) {
+          isRateLimited = true;
+          const retryAfter = parseInt(error.headers['retry-after'], 10) || 5;
+          twitchClient.say(channel, `⚠️ Límite de peticiones alcanzado, espera ${retryAfter} segundos.`);
+          setTimeout(() => {
+            isRateLimited = false;
+            twitchClient.say(channel, '✅ Rate limit levantado, se pueden hacer peticiones de nuevo.');
+          }, retryAfter * 1000);
+        }
       } else {
         twitchClient.say(channel, '⚠️ Ocurrió un error al intentar añadir la canción.');
       }
