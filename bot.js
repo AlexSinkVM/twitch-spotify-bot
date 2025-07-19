@@ -102,22 +102,30 @@ twitchClient.connect()
   .then(() => console.log('✅ Twitch client conectado'))
   .catch(console.error);
 
-// Control básico de cooldown para evitar peticiones muy seguidas
-let lastRequestTimestamp = 0;
-const REQUEST_COOLDOWN = 5000; // 5 segundos entre peticiones
+let isRateLimited = false;
 
 twitchClient.on('message', async (channel, tags, message, self) => {
   console.log(`Mensaje entrante para procesar: "${message}", self: ${self}, canal: ${channel}`);
 
-  if (self) return; // Ignorar mensajes del bot
-  if (channel !== '#alexsink') return; // Solo canal objetivo
+  // Ignorar mensajes del propio bot
+  if (self) return;
+  if (channel !== '#alexsink') return;
 
-  const now = Date.now();
-  if (now - lastRequestTimestamp < REQUEST_COOLDOWN) {
-    twitchClient.say(channel, `⚠️ Por favor espera un poco antes de pedir otra canción.`);
+  // Ignorar mensajes que son respuestas del bot para no procesarlos de nuevo
+  if (
+    message.startsWith('🎶 Añadido a la cola') ||
+    message.startsWith('⚠️ Por favor espera') ||
+    message.startsWith('⚠️ Límite de peticiones alcanzado') ||
+    message.startsWith('⚠️ Ocurrió un error')
+  ) {
     return;
   }
-  lastRequestTimestamp = now;
+
+  // Si estamos en rate limit, ignorar nuevas peticiones
+  if (isRateLimited) {
+    twitchClient.say(channel, '⚠️ Por favor espera un poco antes de pedir otra canción.');
+    return;
+  }
 
   if (tags['custom-reward-id'] === '154d4847-aec0-4b73-8f21-0e3313bc6c4f') {
     try {
@@ -135,14 +143,18 @@ twitchClient.on('message', async (channel, tags, message, self) => {
         twitchClient.say(channel, `❌ No encontré la canción: "${message}"`);
       }
     } catch (error) {
+      console.error('⚠️ Error al agregar a la cola:', error);
+
       if (error.statusCode === 429) {
-        // Rate limit excedido
-        const retryAfter = error.headers && error.headers['retry-after'] ? parseInt(error.headers['retry-after'], 10) : 5;
+        // Rate limit alcanzado
+        isRateLimited = true;
+        const retryAfter = parseInt(error.headers['retry-after'], 10) || 5;
         twitchClient.say(channel, `⚠️ Límite de peticiones alcanzado, espera ${retryAfter} segundos.`);
-        console.warn(`⚠️ Rate limit: espera ${retryAfter} segundos antes de hacer otra petición.`);
-        // Aquí podrías bloquear el cooldown más tiempo si quieres
+        setTimeout(() => {
+          isRateLimited = false;
+          twitchClient.say(channel, '✅ Rate limit levantado, se pueden hacer peticiones de nuevo.');
+        }, retryAfter * 1000);
       } else {
-        console.error('⚠️ Error al agregar a la cola:', error);
         twitchClient.say(channel, '⚠️ Ocurrió un error al intentar añadir la canción.');
       }
     }
