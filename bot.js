@@ -79,7 +79,7 @@ app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en http://localhost:${PORT}/login`);
 });
 
-// Ping interno cada 4 minutos
+// Ping interno cada 4 minutos para mantener el app despierta
 setInterval(() => {
   http.get(`http://localhost:${PORT}/login`).on('error', err => {
     console.error('⛔ Ping interno falló:', err.message);
@@ -101,56 +101,57 @@ twitchClient.connect().then(() => {
   console.log('✅ Conectado a Twitch');
 }).catch(console.error);
 
-let isRateLimited = false;
-
 const customRewardId = '154d4847-aec0-4b73-8f21-0e3313bc6c4f';
 const mensajesDelBot = [
   '🎶 Añadido a la cola:',
-  '⚠️ Por favor espera',
-  '⚠️ Límite de peticiones',
-  '⚠️ Ocurrió un error',
   '❌ No encontré la canción',
-  '✅ Rate limit levantado',
 ];
 
-twitchClient.on('message', async (channel, tags, message, self) => {
-  if (self) return; // Ignorar mensajes propios
-  if (channel !== '#alexsink') return; // Solo canal especificado
-  if (mensajesDelBot.some(m => message.startsWith(m))) return; // Ignorar mensajes del bot
+const queue = [];
+let processing = false;
 
-  if (isRateLimited) {
-    twitchClient.say(channel, '⚠️ Por favor espera un poco antes de pedir otra canción.');
-    return;
-  }
+async function processQueue() {
+  if (processing) return;
+  processing = true;
 
-  if (tags['custom-reward-id'] === customRewardId) {
+  while (queue.length > 0) {
+    const { channel, message } = queue.shift();
+
     try {
       await refreshTokenIfNeeded();
       const result = await spotifyApi.searchTracks(message);
       const track = result.body.tracks.items[0];
-
       if (track) {
         await spotifyApi.addToQueue(track.uri);
-        const response = `🎶 Añadido a la cola: "${track.name}" - ${track.artists[0].name}`;
-        twitchClient.say(channel, response);
+        twitchClient.say(channel, `🎶 Añadido a la cola: "${track.name}" - ${track.artists[0].name}`);
       } else {
         twitchClient.say(channel, `❌ No encontré la canción: "${message}"`);
       }
+      // Espera un poco para no saturar la API
+      await new Promise(r => setTimeout(r, 1500));
     } catch (error) {
       console.error('⚠️ Error al añadir canción:', error.message || error);
       if (error.statusCode === 429) {
-        if (!isRateLimited) {
-          isRateLimited = true;
-          const retryAfter = parseInt(error.headers['retry-after'], 10) || 5;
-          twitchClient.say(channel, `⚠️ Límite de peticiones alcanzado, espera ${retryAfter} segundos.`);
-          setTimeout(() => {
-            isRateLimited = false;
-            twitchClient.say(channel, '✅ Rate limit levantado, se pueden hacer peticiones de nuevo.');
-          }, retryAfter * 1000);
-        }
+        // En caso de rate limit, espera retry-after segundos, pero no avisa en chat
+        const retryAfter = parseInt(error.headers['retry-after'], 10) || 5;
+        await new Promise(r => setTimeout(r, retryAfter * 1000));
       } else {
+        // En otros errores manda mensaje de fallo genérico
         twitchClient.say(channel, '⚠️ Ocurrió un error al intentar añadir la canción.');
       }
     }
+  }
+
+  processing = false;
+}
+
+twitchClient.on('message', (channel, tags, message, self) => {
+  if (self) return;
+  if (channel !== '#alexsink') return;
+  if (mensajesDelBot.some(m => message.startsWith(m))) return;
+
+  if (tags['custom-reward-id'] === customRewardId) {
+    queue.push({ channel, message });
+    processQueue();
   }
 });
