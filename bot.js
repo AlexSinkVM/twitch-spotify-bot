@@ -14,12 +14,6 @@ const app = express();
 const scopes = ['user-modify-playback-state', 'user-read-playback-state'];
 const TOKEN_PATH = path.join(__dirname, 'spotify_token.json');
 
-// Variables para controlar repetición y rate limit
-let lastMessage = '';
-let lastMessageTimestamp = 0;
-let isRateLimited = false;
-let rateLimitResetTime = 0;
-
 // === Funciones para guardar/cargar tokens ===
 function saveTokens(data) {
   fs.writeFileSync(TOKEN_PATH, JSON.stringify(data));
@@ -104,28 +98,48 @@ const twitchClient = new tmi.Client({
   channels: ['alexsink'],
 });
 
+let lastProcessedMessage = '';
+let lastProcessedTime = 0;
+let rateLimited = false;
+
+const blockedPhrases = [
+  '⚠️ límite de peticiones alcanzado',
+  '⚠️ ocurrió un error al intentar añadir la canción',
+  '⏳ espera un momento antes de pedir otra canción',
+];
+
 twitchClient.connect()
   .then(() => console.log('✅ Twitch client conectado'))
   .catch(console.error);
 
 twitchClient.on('message', async (channel, tags, message, self) => {
-  if (self) return;  // Ignorar mensajes del bot
-  if (channel !== '#alexsink') return;  // Solo canal objetivo
+  if (self) return; // Ignorar mensajes del bot
+  if (channel !== '#alexsink') return; // Solo canal objetivo
 
   const now = Date.now();
+  const normalizedMessage = message.trim().toLowerCase();
 
-  // Ignorar mensajes repetidos en menos de 5 segundos
-  if (message === lastMessage && (now - lastMessageTimestamp) < 5000) {
+  // Ignorar mensajes bloqueados (respuestas del bot para evitar loops)
+  if (blockedPhrases.some(phrase => normalizedMessage.includes(phrase))) {
     return;
   }
-  lastMessage = message;
-  lastMessageTimestamp = now;
+
+  // Ignorar mensajes repetidos en menos de 10 segundos
+  if (normalizedMessage === lastProcessedMessage && (now - lastProcessedTime) < 10000) {
+    console.log('Mensaje repetido ignorado:', message);
+    return;
+  }
+
+  // Ignorar si estamos en estado de rate limit
+  if (rateLimited) {
+    twitchClient.say(channel, '⏳ Espera un momento antes de pedir otra canción.');
+    return;
+  }
+
+  lastProcessedMessage = normalizedMessage;
+  lastProcessedTime = now;
 
   if (tags['custom-reward-id'] === '154d4847-aec0-4b73-8f21-0e3313bc6c4f') {
-    if (isRateLimited && now < rateLimitResetTime) {
-      twitchClient.say(channel, `⏳ Espera un momento antes de pedir otra canción.`);
-      return;
-    }
     try {
       await refreshTokenIfNeeded();
 
@@ -143,10 +157,15 @@ twitchClient.on('message', async (channel, tags, message, self) => {
     } catch (error) {
       console.error('⚠️ Error al agregar a la cola:', error);
 
-      if (error.statusCode === 429 && error.headers && error.headers['retry-after']) {
-        isRateLimited = true;
-        rateLimitResetTime = Date.now() + (parseInt(error.headers['retry-after'], 10) + 1) * 1000; // +1 seg de margen
-        twitchClient.say(channel, `⚠️ Límite de peticiones alcanzado, espera ${error.headers['retry-after']} segundos.`);
+      // Detectar si es error 429 (rate limit) y bloquear temporalmente
+      if (error.statusCode === 429 || (error.body && error.body.error && error.body.error.status === 429)) {
+        rateLimited = true;
+        const retryAfter = error.headers['retry-after'] ? parseInt(error.headers['retry-after'], 10) : 5;
+        twitchClient.say(channel, `⚠️ Límite de peticiones alcanzado, espera ${retryAfter} segundos.`);
+        setTimeout(() => {
+          rateLimited = false;
+          console.log('✅ Rate limit levantado, se pueden hacer peticiones de nuevo.');
+        }, retryAfter * 1000);
       } else {
         twitchClient.say(channel, '⚠️ Ocurrió un error al intentar añadir la canción.');
       }
