@@ -14,6 +14,12 @@ const app = express();
 const scopes = ['user-modify-playback-state', 'user-read-playback-state'];
 const TOKEN_PATH = path.join(__dirname, 'spotify_token.json');
 
+// Variables para controlar repetición y rate limit
+let lastMessage = '';
+let lastMessageTimestamp = 0;
+let isRateLimited = false;
+let rateLimitResetTime = 0;
+
 // === Funciones para guardar/cargar tokens ===
 function saveTokens(data) {
   fs.writeFileSync(TOKEN_PATH, JSON.stringify(data));
@@ -102,24 +108,24 @@ twitchClient.connect()
   .then(() => console.log('✅ Twitch client conectado'))
   .catch(console.error);
 
-// Control para evitar exceso de peticiones a Spotify (429)
-let lastRequestTime = 0;
-const MIN_TIME_BETWEEN_REQUESTS = 2500; // 2.5 segundos
-
 twitchClient.on('message', async (channel, tags, message, self) => {
-  console.log(`Mensaje recibido: "${message}", self: ${self}, canal: ${channel}`);
+  if (self) return;  // Ignorar mensajes del bot
+  if (channel !== '#alexsink') return;  // Solo canal objetivo
 
-  if (self) return; // Ignorar mensajes del bot
-  if (channel !== '#alexsink') return; // Solo canal objetivo
+  const now = Date.now();
+
+  // Ignorar mensajes repetidos en menos de 5 segundos
+  if (message === lastMessage && (now - lastMessageTimestamp) < 5000) {
+    return;
+  }
+  lastMessage = message;
+  lastMessageTimestamp = now;
 
   if (tags['custom-reward-id'] === '154d4847-aec0-4b73-8f21-0e3313bc6c4f') {
-    const now = Date.now();
-    if (now - lastRequestTime < MIN_TIME_BETWEEN_REQUESTS) {
-      twitchClient.say(channel, '⌛ Por favor espera un momento antes de pedir otra canción.');
+    if (isRateLimited && now < rateLimitResetTime) {
+      twitchClient.say(channel, `⏳ Espera un momento antes de pedir otra canción.`);
       return;
     }
-    lastRequestTime = now;
-
     try {
       await refreshTokenIfNeeded();
 
@@ -136,7 +142,14 @@ twitchClient.on('message', async (channel, tags, message, self) => {
       }
     } catch (error) {
       console.error('⚠️ Error al agregar a la cola:', error);
-      twitchClient.say(channel, '⚠️ Ocurrió un error al intentar añadir la canción.');
+
+      if (error.statusCode === 429 && error.headers && error.headers['retry-after']) {
+        isRateLimited = true;
+        rateLimitResetTime = Date.now() + (parseInt(error.headers['retry-after'], 10) + 1) * 1000; // +1 seg de margen
+        twitchClient.say(channel, `⚠️ Límite de peticiones alcanzado, espera ${error.headers['retry-after']} segundos.`);
+      } else {
+        twitchClient.say(channel, '⚠️ Ocurrió un error al intentar añadir la canción.');
+      }
     }
   }
 });
