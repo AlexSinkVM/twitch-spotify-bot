@@ -102,6 +102,9 @@ twitchClient.connect()
   .then(() => console.log('✅ Twitch client conectado'))
   .catch(console.error);
 
+let lastRequestTime = 0;
+const requestCooldown = 5000; // 5 segundos de espera entre peticiones
+
 twitchClient.on('message', async (channel, tags, message, self) => {
   console.log(`Mensaje recibido: "${message}", self: ${self}, canal: ${channel}`);
 
@@ -109,6 +112,13 @@ twitchClient.on('message', async (channel, tags, message, self) => {
   if (channel !== '#alexsink') return; // Solo canal objetivo
 
   if (tags['custom-reward-id'] === '154d4847-aec0-4b73-8f21-0e3313bc6c4f') {
+    const now = Date.now();
+    if (now - lastRequestTime < requestCooldown) {
+      twitchClient.say(channel, '⌛ Por favor espera un momento antes de pedir otra canción.');
+      return;
+    }
+    lastRequestTime = now;
+
     try {
       await refreshTokenIfNeeded();
 
