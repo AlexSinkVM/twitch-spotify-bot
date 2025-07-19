@@ -98,46 +98,26 @@ const twitchClient = new tmi.Client({
   channels: ['alexsink'],
 });
 
-let lastProcessedMessage = '';
-let lastProcessedTime = 0;
-let rateLimited = false;
-
-const blockedPhrases = [
-  '⚠️ límite de peticiones alcanzado',
-  '⚠️ ocurrió un error al intentar añadir la canción',
-  '⏳ espera un momento antes de pedir otra canción',
-];
-
 twitchClient.connect()
   .then(() => console.log('✅ Twitch client conectado'))
   .catch(console.error);
 
+// Control básico de cooldown para evitar peticiones muy seguidas
+let lastRequestTimestamp = 0;
+const REQUEST_COOLDOWN = 5000; // 5 segundos entre peticiones
+
 twitchClient.on('message', async (channel, tags, message, self) => {
+  console.log(`Mensaje entrante para procesar: "${message}", self: ${self}, canal: ${channel}`);
+
   if (self) return; // Ignorar mensajes del bot
   if (channel !== '#alexsink') return; // Solo canal objetivo
 
   const now = Date.now();
-  const normalizedMessage = message.trim().toLowerCase();
-
-  // Ignorar mensajes bloqueados (respuestas del bot para evitar loops)
-  if (blockedPhrases.some(phrase => normalizedMessage.includes(phrase))) {
+  if (now - lastRequestTimestamp < REQUEST_COOLDOWN) {
+    twitchClient.say(channel, `⚠️ Por favor espera un poco antes de pedir otra canción.`);
     return;
   }
-
-  // Ignorar mensajes repetidos en menos de 10 segundos
-  if (normalizedMessage === lastProcessedMessage && (now - lastProcessedTime) < 10000) {
-    console.log('Mensaje repetido ignorado:', message);
-    return;
-  }
-
-  // Ignorar si estamos en estado de rate limit
-  if (rateLimited) {
-    twitchClient.say(channel, '⏳ Espera un momento antes de pedir otra canción.');
-    return;
-  }
-
-  lastProcessedMessage = normalizedMessage;
-  lastProcessedTime = now;
+  lastRequestTimestamp = now;
 
   if (tags['custom-reward-id'] === '154d4847-aec0-4b73-8f21-0e3313bc6c4f') {
     try {
@@ -155,18 +135,14 @@ twitchClient.on('message', async (channel, tags, message, self) => {
         twitchClient.say(channel, `❌ No encontré la canción: "${message}"`);
       }
     } catch (error) {
-      console.error('⚠️ Error al agregar a la cola:', error);
-
-      // Detectar si es error 429 (rate limit) y bloquear temporalmente
-      if (error.statusCode === 429 || (error.body && error.body.error && error.body.error.status === 429)) {
-        rateLimited = true;
-        const retryAfter = error.headers['retry-after'] ? parseInt(error.headers['retry-after'], 10) : 5;
+      if (error.statusCode === 429) {
+        // Rate limit excedido
+        const retryAfter = error.headers && error.headers['retry-after'] ? parseInt(error.headers['retry-after'], 10) : 5;
         twitchClient.say(channel, `⚠️ Límite de peticiones alcanzado, espera ${retryAfter} segundos.`);
-        setTimeout(() => {
-          rateLimited = false;
-          console.log('✅ Rate limit levantado, se pueden hacer peticiones de nuevo.');
-        }, retryAfter * 1000);
+        console.warn(`⚠️ Rate limit: espera ${retryAfter} segundos antes de hacer otra petición.`);
+        // Aquí podrías bloquear el cooldown más tiempo si quieres
       } else {
+        console.error('⚠️ Error al agregar a la cola:', error);
         twitchClient.say(channel, '⚠️ Ocurrió un error al intentar añadir la canción.');
       }
     }
