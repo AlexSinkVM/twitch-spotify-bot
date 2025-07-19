@@ -102,8 +102,9 @@ twitchClient.connect()
   .then(() => console.log('✅ Twitch client conectado'))
   .catch(console.error);
 
+// Control para evitar exceso de peticiones a Spotify (429)
 let lastRequestTime = 0;
-const requestCooldown = 5000; // 5 segundos de espera entre peticiones
+const MIN_TIME_BETWEEN_REQUESTS = 2500; // 2.5 segundos
 
 twitchClient.on('message', async (channel, tags, message, self) => {
   console.log(`Mensaje recibido: "${message}", self: ${self}, canal: ${channel}`);
@@ -113,7 +114,7 @@ twitchClient.on('message', async (channel, tags, message, self) => {
 
   if (tags['custom-reward-id'] === '154d4847-aec0-4b73-8f21-0e3313bc6c4f') {
     const now = Date.now();
-    if (now - lastRequestTime < requestCooldown) {
+    if (now - lastRequestTime < MIN_TIME_BETWEEN_REQUESTS) {
       twitchClient.say(channel, '⌛ Por favor espera un momento antes de pedir otra canción.');
       return;
     }
