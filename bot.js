@@ -91,10 +91,10 @@ setInterval(() => {
 const twitchClient = new tmi.Client({
   options: { debug: true },
   identity: {
-    username: 'alexsink',
+    username: 'aletsink',
     password: 'oauth:9s9nn7d1c0p4exfj4c13r3qu9zy0x4',
   },
-  channels: ['alexsink'],
+  channels: ['aletsink'],
 });
 
 twitchClient.connect().then(() => {
@@ -147,7 +147,7 @@ async function processQueue() {
 
 twitchClient.on('message', (channel, tags, message, self) => {
   if (self) return;
-  if (channel !== '#alexsink') return;
+  if (channel !== '#aletsink') return;
   if (mensajesDelBot.some(m => message.startsWith(m))) return;
 
   if (tags['custom-reward-id'] === customRewardId) {
