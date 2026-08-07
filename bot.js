@@ -21,6 +21,13 @@ function saveTokens(data) {
   console.log('✅ Tokens guardados');
 }
 
+function deleteTokens() {
+  if (fs.existsSync(TOKEN_PATH)) {
+    fs.unlinkSync(TOKEN_PATH);
+    console.log('🗑️ Token revocado: se eliminó el archivo de tokens.');
+  }
+}
+
 function loadTokens() {
   if (fs.existsSync(TOKEN_PATH)) {
     const data = fs.readFileSync(TOKEN_PATH);
@@ -51,7 +58,14 @@ async function refreshTokenIfNeeded() {
     });
     console.log('🔄 Token de acceso refrescado');
   } catch (error) {
-    console.error('⚠️ Error refrescando token:', error);
+    const message = error.body?.error?.message || error.message || String(error);
+    console.error('⚠️ Error refrescando token:', message);
+
+    if (message.includes('invalid_grant') || message.includes('Refresh token revoked')) {
+      deleteTokens();
+      throw new Error('Refresh token revocado o inválido. Elimina el token y vuelve a autenticar Spotify en /login.');
+    }
+
     throw error;
   }
 }
