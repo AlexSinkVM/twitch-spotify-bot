@@ -9,6 +9,7 @@ const http = require('http');
 const clientId = '90e213d3dedf4d7aa7aa0c3ad00eb1ff';
 const clientSecret = '45f592b007024040a44c80b032e6a4eb';
 const redirectUri = 'https://twitch-spotify-bot.onrender.com/callback';
+const redirectOrigin = new URL(redirectUri).origin;
 const scopes = ['user-modify-playback-state', 'user-read-playback-state'];
 
 const spotifyApi = new SpotifyWebApi({ clientId, clientSecret, redirectUri });
@@ -36,16 +37,22 @@ if (savedTokens) {
 }
 
 async function refreshTokenIfNeeded() {
+  const refreshToken = spotifyApi.getRefreshToken();
+  if (!refreshToken) {
+    throw new Error('No hay refresh token disponible. Autentica Spotify de nuevo.');
+  }
+
   try {
     const data = await spotifyApi.refreshAccessToken();
     spotifyApi.setAccessToken(data.body.access_token);
     saveTokens({
       access_token: data.body.access_token,
-      refresh_token: spotifyApi.getRefreshToken(),
+      refresh_token: refreshToken,
     });
     console.log('🔄 Token de acceso refrescado');
   } catch (error) {
     console.error('⚠️ Error refrescando token:', error);
+    throw error;
   }
 }
 
@@ -76,15 +83,14 @@ app.get('/callback', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor corriendo en http://localhost:${PORT}/login`);
+  console.log(`🚀 Servidor corriendo en ${redirectOrigin}/login`);
 });
 
-// Ping interno cada 4 minutos para mantener el app despierta
+const keepAliveUrl = `http://localhost:${PORT}/login`;
 setInterval(() => {
-  http.get(`http://localhost:${PORT}/login`).on('error', err => {
+  http.get(keepAliveUrl).on('error', err => {
     console.error('⛔ Ping interno falló:', err.message);
   });
-  console.log('⏰ Ping enviado para mantener activo');
 }, 1000 * 60 * 4);
 
 // === Twitch Bot ===
@@ -131,12 +137,24 @@ async function processQueue() {
       await new Promise(r => setTimeout(r, 1500));
     } catch (error) {
       console.error('⚠️ Error al añadir canción:', error.message || error);
+
       if (error.statusCode === 429) {
-        // En caso de rate limit, espera retry-after segundos, pero no avisa en chat
-        const retryAfter = parseInt(error.headers['retry-after'], 10) || 5;
+        const retryAfter = parseInt(error.headers?.['retry-after'], 10) || 5;
         await new Promise(r => setTimeout(r, retryAfter * 1000));
+        continue;
+      }
+
+      const spotifyError = error.body?.error?.message || error.message || 'Error desconocido';
+      const isAuthError = error.statusCode === 401 || error.statusCode === 403;
+
+      if (isAuthError) {
+        twitchClient.say(channel, '⚠️ Error de autenticación con Spotify. Por favor, vuelve a conectar el bot.');
+        break;
+      }
+
+      if (spotifyError) {
+        twitchClient.say(channel, `⚠️ Error de Spotify: ${spotifyError}`);
       } else {
-        // En otros errores manda mensaje de fallo genérico
         twitchClient.say(channel, '⚠️ Ocurrió un error al intentar añadir la canción.');
       }
     }
